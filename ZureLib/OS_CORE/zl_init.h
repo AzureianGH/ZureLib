@@ -5,9 +5,9 @@
 #include "../zl_types.h"
 
 /// @brief Initialize the ZureLib library
-ZURELIB_RET(void) __cdecl zl_init(ZL_BOOL Vocal);
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_init(ZL_BOOL Vocal);
 
 /// @brief Deinitialize the ZureLib library
-ZURELIB_RET(void) __cdecl zl_deinit();
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_deinit();
 
 #endif // ZURELIB_OS_CORE_INIT_H

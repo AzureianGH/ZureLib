@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "zl_common.h": "c",
+        "fast_str.h": "c",
+        "time.h": "c",
+        "fast_window.h": "c",
+        "zurelib.h": "c",
+        "calling_conv_ret.h": "c",
+        "zl_types.h": "c"
+    }
+}

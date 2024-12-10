@@ -1,37 +1,49 @@
 #include "ZureLib/zurelib.h"
 #include <stdlib.h>
-#include <string.h>
 #include <stdio.h>
-#include <windows.h>
-#include <time.h> // For randomization
+#include <time.h> // For random food placement
 
 ZURELIB_WHDLE window;
 
-int new_window_width = 800;
-int new_window_height = 600;
+int window_width = 800;
+int window_height = 600;
 
-// Paddle and Ball properties
-int paddle_width = 10;
-int paddle_height = 100;
-int ball_size = 10;
+// Snake properties
+#define GRID_SIZE 20
+int snake_length = 1;
+int snake_x[100], snake_y[100]; // Maximum snake length: 100 segments
+int direction_x = 1, direction_y = 0; // Initial direction: right
 
-int player_paddle_x = 50;
-int player_paddle_y = 250;
-int bot_paddle_x = 750;
-int bot_paddle_y = 250;
-int ball_x = 400, ball_y = 300;
-int ball_dx = 2, ball_dy = 2;
-int player_speed = 5;
-int bot_speed = 4;
+// Food properties
+int food_x, food_y;
 
-int player_score = 0;
-int bot_score = 0;
+// Game properties
+int game_running = 1;
+int score = 0;
+double move_timer = 0.1; // Time between snake movements
+double time_elapsed = 0;
 
-int bot_reaction_delay = 0; // Delay counter for the bot
+// Function to generate random food location
+void place_food() {
+    food_x = (rand() % (window_width / GRID_SIZE)) * GRID_SIZE;
+    food_y = (rand() % (window_height / GRID_SIZE)) * GRID_SIZE;
+}
+
+// Function to initialize the snake and food
+void initialize_game() {
+    snake_x[0] = GRID_SIZE * 5; // Start position
+    snake_y[0] = GRID_SIZE * 5;
+    snake_length = 1;
+    direction_x = 1;
+    direction_y = 0;
+    score = 0;
+    place_food();
+}
 
 void on_window_resize(unsigned int width, unsigned int height) {
-    new_window_width = width;
-    new_window_height = height;
+    window_width = width;
+    window_height = height;
+    place_food();
 }
 
 void on_window_close() {
@@ -40,115 +52,92 @@ void on_window_close() {
     exit(0);
 }
 
-void draw_score() {
+// Draw score on the screen
+void draw_score(ZL_TTF_FONT fnt) {
     char score_text[32];
-    snprintf(score_text, sizeof(score_text), "Player: %d  Bot: %d", player_score, bot_score);
-
-    zl_qdraw_string(window, 0, 10, score_text, 0xFFFFFF);
+    sprintf(score_text, "Score: %d", score);
+    if (fnt.font) {
+        zl_qdraw_string_font(window, 10, 10, score_text, 0xFFFFFF, fnt);
+    } else {
+        zl_qdraw_string(window, 10, 10, score_text, 0xFFFFFF);
+    }
 }
 
-void pong_game_loop() {
-    srand((unsigned int)time(NULL)); // Seed for randomization
+// Draw the game screen
+void draw_game() {
+    zl_qclear_window(window);
 
-    while (!zl_qshould_window_close(window)) {
-        zl_qclear_window(window);
+    // Draw the background
+    zl_qdraw_rect(window, 0, 0, window_width, window_height, 0x000000);
 
-        // Draw the black background
-        zl_qdraw_rect(window, 0, 0, new_window_width, new_window_height, 0x000000);
+    // Draw the snake
+    for (int i = 0; i < snake_length; i++) {
+        zl_qdraw_rect(window, snake_x[i], snake_y[i], GRID_SIZE, GRID_SIZE, 0x00FF00);
+    }
 
-        // Draw player paddle
-        zl_qdraw_rect(window, player_paddle_x, player_paddle_y, paddle_width, paddle_height, 0xFFFFFF);
+    // Draw the food
+    zl_qdraw_rect(window, food_x, food_y, GRID_SIZE, GRID_SIZE, 0xFF0000);
+}
 
-        // Draw bot paddle
-        zl_qdraw_rect(window, bot_paddle_x, bot_paddle_y, paddle_width, paddle_height, 0xFFFFFF);
+// Move the snake and handle game logic
+void update_snake() {
+    // Update the position of the snake segments
+    for (int i = snake_length - 1; i > 0; i--) {
+        snake_x[i] = snake_x[i - 1];
+        snake_y[i] = snake_y[i - 1];
+    }
 
-        // Draw ball
-        zl_qdraw_rect(window, ball_x, ball_y, ball_size, ball_size, 0xFFFFFF);
+    // Move the head of the snake
+    snake_x[0] += direction_x * GRID_SIZE;
+    snake_y[0] += direction_y * GRID_SIZE;
 
-        // Draw the score
-        draw_score();
+    // Check for collision with food
+    if (snake_x[0] == food_x && snake_y[0] == food_y) {
+        snake_length++;
+        score++;
+        place_food();
+    }
 
-        // Player paddle movement
-        if (zl_qkey_down(ZL_KEY_W) && player_paddle_y > 0) {
-            player_paddle_y -= player_speed;
+    // Check for collision with walls
+    if (snake_x[0] < 0 || snake_x[0] >= window_width ||
+        snake_y[0] < 0 || snake_y[0] >= window_height) {
+        game_running = 0;
+    }
+
+    // Check for collision with itself
+    for (int i = 1; i < snake_length; i++) {
+        if (snake_x[0] == snake_x[i] && snake_y[0] == snake_y[i]) {
+            game_running = 0;
+            break;
         }
-        if (zl_qkey_down(ZL_KEY_S) && player_paddle_y < new_window_height - paddle_height) {
-            player_paddle_y += player_speed;
-        }
+    }
+}
 
-        // Bot paddle AI with delay and randomness
-        if (bot_reaction_delay <= 0) {
-            int target_position = ball_y + rand() % 21 - 10; // Add randomness
-            if (bot_paddle_y + paddle_height / 2 < target_position) {
-                bot_paddle_y += bot_speed;
-            }
-            if (bot_paddle_y + paddle_height / 2 > target_position) {
-                bot_paddle_y -= bot_speed;
-            }
-            bot_reaction_delay = 3; // Reset delay
-        } else {
-            bot_reaction_delay--;
-        }
-
-        if (bot_paddle_y < 0) bot_paddle_y = 0;
-        if (bot_paddle_y > new_window_height - paddle_height) bot_paddle_y = new_window_height - paddle_height;
-
-        // Ball movement
-        ball_x += ball_dx;
-        ball_y += ball_dy;
-
-        // Ball collision with top and bottom walls
-        if (ball_y <= 0 || ball_y >= new_window_height - 50 - ball_size) {
-            ball_dy = -ball_dy;
-        }
-
-        // Ball collision with player paddle
-        if (ball_x <= player_paddle_x + paddle_width &&
-            ball_y + ball_size >= player_paddle_y &&
-            ball_y <= player_paddle_y + paddle_height) {
-            ball_dx = -ball_dx;
-            ball_x = player_paddle_x + paddle_width; // Prevent ball from getting stuck
-        }
-
-        // Ball collision with bot paddle
-        if (ball_x + ball_size >= bot_paddle_x &&
-            ball_y + ball_size >= bot_paddle_y &&
-            ball_y <= bot_paddle_y + paddle_height) {
-            ball_dx = -ball_dx;
-            ball_x = bot_paddle_x - ball_size; // Prevent ball from getting stuck
-        }
-
-        // Ball out of bounds (reset to center and update score)
-        if (ball_x < 0) {
-            bot_score++;
-            ball_x = new_window_width / 2;
-            ball_y = new_window_height / 2;
-            ball_dx = 2; // Serve towards the player
-        }
-        if (ball_x > new_window_width) {
-            player_score++;
-            ball_x = new_window_width / 2;
-            ball_y = new_window_height / 2;
-            ball_dx = -2; // Serve towards the bot
-        }
-
-        zl_qupdate_window(window);
-        zl_qdo_events(window);
-
-        // Cap the framerate to 60fps
-        double dt = zl_get_delta_time();
-        if (dt < 1.0 / 60.0) {
-            zl_qsleep((unsigned int)((1.0 / 60.0 - dt) * 1000));
-        }
+// Handle keyboard input for snake direction
+void handle_input() {
+    if (zl_qkey_down(ZL_KEY_UP) && direction_y == 0) {
+        direction_x = 0;
+        direction_y = -1;
+    }
+    if (zl_qkey_down(ZL_KEY_DOWN) && direction_y == 0) {
+        direction_x = 0;
+        direction_y = 1;
+    }
+    if (zl_qkey_down(ZL_KEY_LEFT) && direction_x == 0) {
+        direction_x = -1;
+        direction_y = 0;
+    }
+    if (zl_qkey_down(ZL_KEY_RIGHT) && direction_x == 0) {
+        direction_x = 1;
+        direction_y = 0;
     }
 }
 
 int main() {
     zl_init(ZL_TRUE);
-
-    char* windows_title = "Pong Game";
-
-    window = zl_qcreate_window(windows_title, new_window_width, new_window_height);
+    zl_qset_console_visibility(0);
+    srand((unsigned int)time(NULL)); // Seed for randomization
+    window = zl_qcreate_window("Snake Game", window_width, window_height);
 
     if (!window) {
         zl_qwriteln("Failed to create window!");
@@ -157,12 +146,40 @@ int main() {
     }
 
     zl_register_on_resize(on_window_resize);
-
     zl_register_on_close(on_window_close);
 
-    zl_qset_window_title(window, windows_title);
+    initialize_game();
 
-    pong_game_loop();
+    double last_time = zl_get_time();
+
+    while (game_running && !zl_qshould_window_close(window)) {
+        zl_qdo_events(window);
+
+        // Handle player input
+        handle_input();
+
+        // Update game logic based on timer
+        double current_time = zl_get_time();
+        time_elapsed += current_time - last_time;
+        last_time = current_time;
+
+        if (time_elapsed >= move_timer) {
+            time_elapsed -= move_timer;
+            update_snake();
+        }
+
+        // Draw the game
+        draw_game();
+        draw_score((ZL_TTF_FONT) {0});
+
+        zl_qupdate_window(window);
+
+        // Cap the framerate to 60fps
+        double frame_time = zl_get_time() - current_time;
+        if (frame_time < 1.0 / 60.0) {
+            zl_qsleep((unsigned int)((1.0 / 60.0 - frame_time) * 1000));
+        }
+    }
 
     zl_qdestroy_window(window);
     zl_deinit();

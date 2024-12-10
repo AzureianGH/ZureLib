@@ -12,18 +12,22 @@ ZURELIBOBJ := $(subst $(ZURELIB),$(ZURELIB)/obj,$(ZURELIBOBJ))
 
 # Compiler and linker flags
 CC = gcc
-#include window GUI library
-CFLAGS = -Wall -Wextra -Werror -g -Wno-unused-variable -lgdi32 -luser32
+CFLAGS = -Wall -Wextra -Werror -g -Wno-unused-variable -I$(ZURELIB) -DBUILD_DLL
 LDFLAGS = -lm -lgdi32 -luser32
+DLLFLAGS = -shared -fPIC
 
-# Final output target
-TARGET = main
+# Output directories for DLL and object files
+BUILD_DIR = ./build
+LIBRARY_NAME = zurelib.dll
+IMPORT_LIB = zurelib.lib
+TARGET = $(BUILD_DIR)/main.exe
 
-# Default target to build the main executable
-all: $(TARGET)
+# Default target to build the DLL and executable
+all: $(TARGET) $(BUILD_DIR)/$(LIBRARY_NAME)
 
 # Link the main executable using the main file and object files
-$(TARGET): $(MAINFILE) $(ZURELIBOBJ)
+$(TARGET): $(MAINFILE) $(BUILD_DIR)/$(LIBRARY_NAME)
+	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Compile each .c file in ZureLib to object files
@@ -31,9 +35,18 @@ $(ZURELIB)/obj/%.o: $(ZURELIB)/%.c
 	@mkdir -p $(dir $@)  # Create the full directory path for the object file
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-# Clean up compiled object files and the main executable
+# Build the DLL from the object files
+$(BUILD_DIR)/$(LIBRARY_NAME): $(ZURELIBOBJ)
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(DLLFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Clean up compiled object files, DLL, import library, and the main executable
 clean:
-	rm -f $(ZURELIB)/obj/*.o $(TARGET)
+	rm -f $(ZURELIB)/obj/*.o $(TARGET) $(BUILD_DIR)/$(LIBRARY_NAME) $(BUILD_DIR)/$(IMPORT_LIB)
 	rm -rf $(ZURELIB)/obj
 
-.PHONY: all clean
+# Run the main executable
+run: $(TARGET)
+	./$(TARGET)
+
+.PHONY: all clean run

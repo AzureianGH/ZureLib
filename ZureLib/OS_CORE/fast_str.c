@@ -43,7 +43,7 @@ ZURELIB_EXTERN ZURELIB_RET(ZL_BOOL) __cdecl zl_enable_qstr_sse()
     return ZL_TRUE;
 }
 
-ZURELIB_RET(unsigned int) __cdecl zl_qstrlen(const char * str)
+ZURELIB_API ZURELIB_RET(unsigned int) __cdecl zl_qstrlen(const char * str)
 {
     return zl_qstrlen_fp(str);
 }
