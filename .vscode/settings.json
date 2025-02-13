@@ -6,6 +6,8 @@
         "fast_window.h": "c",
         "zurelib.h": "c",
         "calling_conv_ret.h": "c",
-        "zl_types.h": "c"
+        "zl_types.h": "c",
+        "stdlib.h": "c",
+        "*.rh": "c"
     }
 }

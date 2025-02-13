@@ -140,7 +140,14 @@ ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_font_size(ZURELIB_WHDLE win
 /// @brief Set the window icon (Bitmap format)
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_icon(ZURELIB_WHDLE window, HICON icon);
 
+/// @brief Load an icon from a file
+ZURELIB_API ZURELIB_RET(HICON) __cdecl zl_load_from_image_file(const char* filePath);
+
+/// @brief Set the console visibility
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_console_visibility(unsigned char visible);
+
+/// @brief Set the cursor icon on the application
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_set_cursor_icon_on_application(HCURSOR cursor);
 
 typedef struct {
     void (*onClick)(void);
@@ -216,7 +223,23 @@ typedef enum {
 
 } ZL_KEYCODE;
 
+typedef enum
+{
+    ZL_MOUSE_LEFT = 0x01,
+    ZL_MOUSE_RIGHT = 0x02,
+    ZL_MOUSE_MIDDLE = 0x04,
+    ZL_MOUSE_X1 = 0x08,
+    ZL_MOUSE_X2 = 0x16
+} ZL_MOUSE_BUTTON;
+
+
+
 /// @brief Check for a key down
 ZURELIB_API ZURELIB_RET(unsigned char) __cdecl zl_qkey_down(ZL_KEYCODE key);
+
+/// @brief Check for a mouse button down
+ZURELIB_API ZURELIB_RET(unsigned char) __cdecl zl_qmouse_button_down(ZL_MOUSE_BUTTON button);
+ZURELIB_API ZURELIB_RET(unsigned int) __cdecl zl_qmouse_x();
+ZURELIB_API ZURELIB_RET(unsigned int) __cdecl zl_qmouse_y();
 
 #endif // ZURELIB_OS_WNDS_FAST_WINDOW_H

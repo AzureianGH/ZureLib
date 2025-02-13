@@ -4,6 +4,20 @@
 #include "../zl_types.h"
 #include "calling_conv_ret.h"
 
+typedef enum
+{
+    ZL_COLOR_WHITE = 0xFFFFFF,
+    ZL_COLOR_BLACK = 0x000000,
+    ZL_COLOR_RED = 0xFF0000,
+    ZL_COLOR_GREEN = 0x00FF00,
+    ZL_COLOR_BLUE = 0x0000FF,
+    ZL_COLOR_YELLOW = 0xFFFF00,
+    ZL_COLOR_CYAN = 0x00FFFF,
+    ZL_COLOR_MAGENTA = 0xFF00FF
+} ZL_COLOR;
+
+
+
 #define ZL_FILE_HANDLE void*
 
 /// @brief Zero-out a block of memory

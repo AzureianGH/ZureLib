@@ -1,5 +1,5 @@
 # Define the main source file and ZureLib directory
-MAINFILE = main.c
+MAINFILE = maine.c
 ZURELIB = ./ZureLib
 
 # Collect all .c and .h files from the ZureLib folder and subdirectories

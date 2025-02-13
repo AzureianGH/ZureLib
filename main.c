@@ -1,49 +1,55 @@
 #include "ZureLib/zurelib.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <time.h> // For random food placement
+#include <time.h>
 
 ZURELIB_WHDLE window;
 
 int window_width = 800;
 int window_height = 600;
 
-// Snake properties
-#define GRID_SIZE 20
-int snake_length = 1;
-int snake_x[100], snake_y[100]; // Maximum snake length: 100 segments
-int direction_x = 1, direction_y = 0; // Initial direction: right
+// Player properties
+#define PLAYER_WIDTH 50
+#define PLAYER_HEIGHT 50
+float player_x, player_y;
+float player_velocity_y;
+#define PLAYER_JUMP_FORCE -10.0f
+#define GRAVITY 0.3f
 
-// Food properties
-int food_x, food_y;
+// Platform properties
+#define PLATFORM_COUNT 10
+#define PLATFORM_WIDTH 100
+#define PLATFORM_HEIGHT 20
+float platform_x[PLATFORM_COUNT], platform_y[PLATFORM_COUNT];
 
 // Game properties
-int game_running = 1;
 int score = 0;
-double move_timer = 0.1; // Time between snake movements
-double time_elapsed = 0;
+int game_running = 1;
+float camera_offset_y = 0;
 
-// Function to generate random food location
-void place_food() {
-    food_x = (rand() % (window_width / GRID_SIZE)) * GRID_SIZE;
-    food_y = (rand() % (window_height / GRID_SIZE)) * GRID_SIZE;
+// Function to initialize platforms at random positions
+void initialize_platforms() {
+    for (int i = 0; i < PLATFORM_COUNT; i++) {
+        platform_x[i] = rand() % (window_width - PLATFORM_WIDTH);
+        platform_y[i] = window_height - (i * (window_height / PLATFORM_COUNT));
+    }
 }
 
-// Function to initialize the snake and food
+// Function to reset the game
 void initialize_game() {
-    snake_x[0] = GRID_SIZE * 5; // Start position
-    snake_y[0] = GRID_SIZE * 5;
-    snake_length = 1;
-    direction_x = 1;
-    direction_y = 0;
+    player_x = window_width / 2 - PLAYER_WIDTH / 2;
+    player_y = window_height - PLAYER_HEIGHT * 3;
+    //forcibly place platform under player at start
+    player_y = platform_y[0] - PLAYER_HEIGHT;
+    player_velocity_y = 0;
     score = 0;
-    place_food();
+    camera_offset_y = 0;
+    initialize_platforms();
 }
 
 void on_window_resize(unsigned int width, unsigned int height) {
     window_width = width;
     window_height = height;
-    place_food();
 }
 
 void on_window_close() {
@@ -52,92 +58,90 @@ void on_window_close() {
     exit(0);
 }
 
-// Draw score on the screen
-void draw_score(ZL_TTF_FONT fnt) {
-    char score_text[32];
-    sprintf(score_text, "Score: %d", score);
-    if (fnt.font) {
-        zl_qdraw_string_font(window, 10, 10, score_text, 0xFFFFFF, fnt);
-    } else {
-        zl_qdraw_string(window, 10, 10, score_text, 0xFFFFFF);
-    }
-}
-
-// Draw the game screen
+// Draw the game objects
 void draw_game() {
     zl_qclear_window(window);
-
+    
     // Draw the background
-    zl_qdraw_rect(window, 0, 0, window_width, window_height, 0x000000);
+    zl_qdraw_filled_rect(window, 0, 0, window_width, window_height, 0x87CEEB); // Sky blue
 
-    // Draw the snake
-    for (int i = 0; i < snake_length; i++) {
-        zl_qdraw_rect(window, snake_x[i], snake_y[i], GRID_SIZE, GRID_SIZE, 0x00FF00);
+    // Draw the player
+    zl_qdraw_filled_rect(window, player_x, player_y - camera_offset_y, PLAYER_WIDTH, PLAYER_HEIGHT, 0xFF6347); // Tomato red
+
+    // Draw the platforms
+    for (int i = 0; i < PLATFORM_COUNT; i++) {
+        zl_qdraw_filled_rect(window, platform_x[i], platform_y[i] - camera_offset_y, PLATFORM_WIDTH, PLATFORM_HEIGHT, 0x32CD32); // Lime green
     }
 
-    // Draw the food
-    zl_qdraw_rect(window, food_x, food_y, GRID_SIZE, GRID_SIZE, 0xFF0000);
+    // Draw the score
+    char score_text[32];
+    sprintf(score_text, "Score: %d", score);
+    zl_qdraw_string(window, 10, 10, score_text, 0xFFFFFF);
 }
 
-// Move the snake and handle game logic
-void update_snake() {
-    // Update the position of the snake segments
-    for (int i = snake_length - 1; i > 0; i--) {
-        snake_x[i] = snake_x[i - 1];
-        snake_y[i] = snake_y[i - 1];
-    }
+// Update game logic
+void update_game() {
+    // Apply gravity
+    player_velocity_y += GRAVITY * ((score/100) == 0 ? 1 : (score/100));
+    player_y += player_velocity_y;
 
-    // Move the head of the snake
-    snake_x[0] += direction_x * GRID_SIZE;
-    snake_y[0] += direction_y * GRID_SIZE;
-
-    // Check for collision with food
-    if (snake_x[0] == food_x && snake_y[0] == food_y) {
-        snake_length++;
-        score++;
-        place_food();
-    }
-
-    // Check for collision with walls
-    if (snake_x[0] < 0 || snake_x[0] >= window_width ||
-        snake_y[0] < 0 || snake_y[0] >= window_height) {
-        game_running = 0;
-    }
-
-    // Check for collision with itself
-    for (int i = 1; i < snake_length; i++) {
-        if (snake_x[0] == snake_x[i] && snake_y[0] == snake_y[i]) {
-            game_running = 0;
-            break;
+    // Check for collision with platforms
+    for (int i = 0; i < PLATFORM_COUNT; i++) {
+        if (player_x + PLAYER_WIDTH > platform_x[i] && player_x < platform_x[i] + PLATFORM_WIDTH &&
+            player_y + PLAYER_HEIGHT > platform_y[i] && player_y + PLAYER_HEIGHT - player_velocity_y < platform_y[i]) {
+            player_velocity_y = PLAYER_JUMP_FORCE;
+            score++;
         }
     }
+    // Handle keyboard input
+    if (zl_qkey_down(ZL_KEY_LEFT)) {
+        player_x -= 10;
+        if (player_x < 0) player_x = 0;
+    }
+    if (zl_qkey_down(ZL_KEY_RIGHT)) {
+        player_x += 10;
+        if (player_x > window_width - PLAYER_WIDTH) player_x = window_width - PLAYER_WIDTH;
+    }
+    if (zl_qkey_down(ZL_KEY_PLUS)) {
+        player_velocity_y = PLAYER_JUMP_FORCE;
+    }
+
+    // Scroll the camera upward if the player jumps higher
+    if (player_y - camera_offset_y < window_height / 2) {
+        camera_offset_y = player_y - window_height / 2;
+    }
+
+    // Recycle platforms that go off-screen
+    for (int i = 0; i < PLATFORM_COUNT; i++) {
+        if (platform_y[i] - camera_offset_y > window_height) {
+            platform_x[i] = rand() % (window_width - PLATFORM_WIDTH);
+            platform_y[i] -= window_height;
+        }
+    }
+
+    // End the game if the player falls below the screen
+    if (player_y - camera_offset_y > window_height) {
+        initialize_game();
+    }
 }
 
-// Handle keyboard input for snake direction
+// Handle keyboard input
 void handle_input() {
-    if (zl_qkey_down(ZL_KEY_UP) && direction_y == 0) {
-        direction_x = 0;
-        direction_y = -1;
+    if (zl_qkey_down(ZL_KEY_LEFT)) {
+        player_x -= 10;
+        if (player_x < 0) player_x = 0;
     }
-    if (zl_qkey_down(ZL_KEY_DOWN) && direction_y == 0) {
-        direction_x = 0;
-        direction_y = 1;
-    }
-    if (zl_qkey_down(ZL_KEY_LEFT) && direction_x == 0) {
-        direction_x = -1;
-        direction_y = 0;
-    }
-    if (zl_qkey_down(ZL_KEY_RIGHT) && direction_x == 0) {
-        direction_x = 1;
-        direction_y = 0;
+    if (zl_qkey_down(ZL_KEY_RIGHT)) {
+        player_x += 10;
+        if (player_x > window_width - PLAYER_WIDTH) player_x = window_width - PLAYER_WIDTH;
     }
 }
 
 int main() {
     zl_init(ZL_TRUE);
     zl_qset_console_visibility(0);
-    srand((unsigned int)time(NULL)); // Seed for randomization
-    window = zl_qcreate_window("Snake Game", window_width, window_height);
+    srand((unsigned int)time(NULL));
+    window = zl_qcreate_window("Doodle Jump Clone", window_width, window_height);
 
     if (!window) {
         zl_qwriteln("Failed to create window!");
@@ -150,35 +154,22 @@ int main() {
 
     initialize_game();
 
-    double last_time = zl_get_time();
-
     while (game_running && !zl_qshould_window_close(window)) {
         zl_qdo_events(window);
 
         // Handle player input
         handle_input();
 
-        // Update game logic based on timer
-        double current_time = zl_get_time();
-        time_elapsed += current_time - last_time;
-        last_time = current_time;
-
-        if (time_elapsed >= move_timer) {
-            time_elapsed -= move_timer;
-            update_snake();
-        }
+        // Update game logic
+        update_game();
 
         // Draw the game
         draw_game();
-        draw_score((ZL_TTF_FONT) {0});
 
         zl_qupdate_window(window);
 
         // Cap the framerate to 60fps
-        double frame_time = zl_get_time() - current_time;
-        if (frame_time < 1.0 / 60.0) {
-            zl_qsleep((unsigned int)((1.0 / 60.0 - frame_time) * 1000));
-        }
+        zl_qsleep(16);
     }
 
     zl_qdestroy_window(window);
