@@ -30,6 +30,8 @@ typedef union {
 /// @brief Quick-create a window
 ZURELIB_API ZURELIB_RET(ZURELIB_WHDLE) __cdecl zl_qcreate_window(const char* title, unsigned int width, unsigned int height);
 
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_set_dpi_scaling(unsigned char scaling);
+
 ZURELIB_API ZURELIB_RET(LPCWSTR) __cdecl zl_qcstring_to_lpcwstr(const char* str);
 
 /// @brief Quick-destroy a window
@@ -41,6 +43,9 @@ ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_title(ZURELIB_WHDLE window,
 /// @brief Quick-set the window size
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_size(ZURELIB_WHDLE window, unsigned int width, unsigned int height);
 
+/// @brief Quick-get the window drawing size
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_qget_window_drawing_size(ZURELIB_WHDLE window, int* width, int* height);
+
 /// @brief Quick-set the window position
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_position(ZURELIB_WHDLE window, unsigned int x, unsigned int y);
 
@@ -51,7 +56,7 @@ ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_visibility(ZURELIB_WHDLE wi
 ZURELIB_API ZURELIB_RET(unsigned char) __cdecl zl_qget_window_visibility(ZURELIB_WHDLE window);
 
 /// @brief Quick-get the window size
-ZURELIB_API ZURELIB_RET(void) __cdecl zl_qget_window_size(ZURELIB_WHDLE window, unsigned int* width, unsigned int* height);
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_qget_window_size(ZURELIB_WHDLE window, int* width, int* height);
 
 /// @brief Quick-get the window position
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qget_window_position(ZURELIB_WHDLE window, unsigned int* x, unsigned int* y);
@@ -232,16 +237,49 @@ typedef enum
 
 typedef struct
 {
-    void (*onClick)(void);
     int x;
     int y;
     int width;
     int height;
+    ZL_BOOL docked;
+    void (*onClick)(void);
     char text[256];
     int text_size;
     ZL_BOOL width_auto;
     ZL_BOOL visible;
 } ZL_BUTTON;
+
+typedef struct
+{
+    int x;
+    int y;
+    int width;
+    int height;
+    ZL_BOOL docked;
+    char* text;
+    int text_size;
+    ZL_BOOL width_auto;
+    ZL_BOOL visible;
+    ZL_BOOL no_background;
+} ZL_LABEL;
+
+//textbox
+typedef struct
+{
+    int x;
+    int y;
+    int width;
+    int height;
+    ZL_BOOL docked;
+    char* text;
+    int text_size;
+    ZL_BOOL visible;
+    ZL_BOOL readonly;
+    ZL_BOOL has_cursor;
+    ZL_BOOL multiline;
+    ZL_BOOL no_background;
+    ZL_BOOL password;
+} ZL_TEXTBOX;
 
 typedef enum
 {
@@ -258,6 +296,24 @@ typedef enum
     ZL_MB_YES_RETURN = 2,
     ZL_MB_NO_RETURN = 3
 } ZL_MESSAGE_BOX_RETURN;
+
+typedef enum
+{
+    ZL_DOCK_TOP = 0,
+    ZL_DOCK_BOTTOM = 1,
+    ZL_DOCK_LEFT = 2,
+    ZL_DOCK_RIGHT = 3,
+    ZL_DOCK_FILL = 4
+} ZL_DOCK_LOCATION;
+
+typedef struct
+{
+    int x;
+    int y;
+    int width;
+    int height;
+    ZL_BOOL docked;
+} ZL_DEFAULT_ELEMENT;
 
 /// @brief Check for a key down
 ZURELIB_API ZURELIB_RET(unsigned char) __cdecl zl_qkey_down(ZL_KEYCODE key);
@@ -276,5 +332,25 @@ ZURELIB_API ZURELIB_RET(ZL_MESSAGE_BOX_RETURN) __cdecl zl_qmessage_box(ZURELIB_W
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qdraw_button(ZURELIB_WHDLE window, ZL_BUTTON* button);
 
 ZURELIB_API ZURELIB_RET(ZL_BUTTON*) __cdecl zl_qcreate_button(int x, int y, int width, int height, int text_size, const char* text, void (*onClick)(void), ZL_BOOL auto_width);
+
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_show_tooltip(ZURELIB_WHDLE window, const char* text, int x, int y);
+
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_show_mouse_tooltip(ZURELIB_WHDLE window, const char* text);
+
+ZURELIB_API ZURELIB_RET(ZL_LABEL*) __cdecl zl_qcreate_label(int x, int y, int width, int height, int text_size, const char* text, ZL_BOOL auto_width, ZL_BOOL no_background);
+
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_qdraw_label(ZURELIB_WHDLE window, ZL_LABEL* label);
+
+ZURELIB_API ZURELIB_RET(ZL_TEXTBOX*) __cdecl zl_qcreate_textbox(int x, int y, int width, int height, int text_size, const char* text, ZL_BOOL readonly, ZL_BOOL has_cursor, ZL_BOOL multiline, ZL_BOOL password, ZL_BOOL no_background);
+
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_qdraw_textbox(ZURELIB_WHDLE window, ZL_TEXTBOX* textbox);
+
+
+
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_dock_item(ZURELIB_WHDLE window, ZURELIB_WHDLE item, ZL_DOCK_LOCATION location);
+
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_start_dedicated_render_thread(ZURELIB_WHDLE window, void (*drawing)(void));
+
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_stop_dedicated_render_thread();
 
 #endif // ZURELIB_OS_WNDS_FAST_WINDOW_H

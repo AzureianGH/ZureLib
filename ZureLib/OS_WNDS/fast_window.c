@@ -20,6 +20,7 @@ typedef struct {
 
 BackBuffer g_backBuffer = { 0 };
 ZL_BOOL MOUSETOGGLE = ZL_FALSE;
+unsigned char scalingdpi = 1;
 // Initialize back buffer
 void InitializeBackBuffer(HWND hwnd) {
     if (!hwnd) return;
@@ -147,6 +148,19 @@ ZURELIB_WHDLE __cdecl zl_qcreate_window(const char* title, unsigned int width, u
     return hwnd;
 }
 
+void __cdecl zl_set_dpi_scaling(unsigned char scaling)
+{
+    scalingdpi = scaling;
+    if (scaling == 1)
+    {
+        SetProcessDPIAware();
+    }
+    else
+    {
+        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_UNAWARE);
+    }
+}
+
 LPCWSTR __cdecl zl_qcstring_to_lpcwstr(const char* str) {
     wchar_t* wstr = (wchar_t*)malloc((strlen(str) + 1) * sizeof(wchar_t));
     mbstowcs(wstr, str, strlen(str) + 1);
@@ -177,11 +191,18 @@ unsigned char __cdecl zl_qget_window_visibility(ZURELIB_WHDLE window) {
     return IsWindowVisible(window) ? ZURELIB_WINDOW_VISIBLE : ZURELIB_WINDOW_HIDDEN;
 }
 
-void __cdecl zl_qget_window_size(ZURELIB_WHDLE window, unsigned int* width, unsigned int* height) {
+void __cdecl zl_qget_window_drawing_size(ZURELIB_WHDLE window, int* width, int* height) {
+    RECT rect;
+    GetClientRect(window, &rect);
+    if (width != NULL) *width = rect.right - rect.left;
+    if (height != NULL) *height = rect.bottom - rect.top;
+}
+
+void __cdecl zl_qget_window_size(ZURELIB_WHDLE window, int* width, int* height) {
     RECT rect;
     GetWindowRect(window, &rect);
-    *width = rect.right - rect.left;
-    *height = rect.bottom - rect.top;
+    if (width != NULL) *width = rect.right - rect.left;
+    if (height != NULL) *height = rect.bottom - rect.top;
 }
 
 void __cdecl zl_qget_window_position(ZURELIB_WHDLE window, unsigned int* x, unsigned int* y) {
@@ -204,11 +225,17 @@ void __cdecl zl_qdraw_point(unsigned int x, unsigned int y, unsigned int color) 
 void __cdecl zl_qdraw_line(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int color) {
     HPEN pen = CreatePen(PS_SOLID, 1, color);
     HPEN oldPen = (HPEN)SelectObject(g_backBuffer.backBufferDC, pen);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(g_backBuffer.backBufferDC, GetStockObject(NULL_BRUSH));
+
     MoveToEx(g_backBuffer.backBufferDC, x1, y1, NULL);
     LineTo(g_backBuffer.backBufferDC, x2, y2);
+
     SelectObject(g_backBuffer.backBufferDC, oldPen);
+    SelectObject(g_backBuffer.backBufferDC, oldBrush);
+
     DeleteObject(pen);
 }
+
 
 // Draw rect on the back buffer
 void __cdecl zl_qdraw_rect(ZURELIB_WHDLE window, unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned int color) {
@@ -290,6 +317,8 @@ unsigned char __cdecl zl_qshould_window_close(ZURELIB_WHDLE window) {
 
 double DeltaTime = 0.0;
 
+#include <process.h>
+
 void __cdecl zl_qdo_events(ZURELIB_WHDLE hdnle) {
     static LARGE_INTEGER frequency;
     static LARGE_INTEGER lastTime;
@@ -309,7 +338,7 @@ void __cdecl zl_qdo_events(ZURELIB_WHDLE hdnle) {
     }
 
     MSG msg;
-    while (PeekMessageA(&msg, hdnle, 0, 0, PM_REMOVE)) {
+    while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
         DispatchMessageA(&msg);
     }
@@ -591,55 +620,66 @@ void __cdecl zl_qdraw_button(ZURELIB_WHDLE window, ZL_BUTTON* button) {
         return;
     }
 
-    // Button base color
-    zl_qdraw_filled_rect(window, button->x, button->y, button->width, button->height, RGB(125, 125, 125));
+    // Get window size and clamp button coords
+    int wndWidth = 0, wndHeight = 0;
+    zl_qget_window_drawing_size(window, &wndWidth, &wndHeight);
+    int x1 = button->x < 0 ? 0 : button->x;
+    int y1 = button->y < 0 ? 0 : button->y;
+    int x2 = (button->x + button->width) > wndWidth ? wndWidth : (button->x + button->width);
+    int y2 = (button->y + button->height) > wndHeight ? wndHeight : (button->y + button->height);
 
-    // Highlighted top-left edges (light gray for raised effect)
-    zl_qdraw_line(button->x, button->y, button->x + button->width - 1, button->y, RGB(255, 255, 255));
-    zl_qdraw_line(button->x, button->y, button->x, button->y + button->height - 1, RGB(255, 255, 255));
+    int drawWidth = x2 - x1;
+    int drawHeight = y2 - y1;
+    if (drawWidth <= 0 || drawHeight <= 0) {
+        return;
+    }
 
-    // Shadowed bottom-right edges (dark gray for depth)
-    zl_qdraw_line(button->x + button->width - 1, button->y, button->x + button->width - 1, button->y + button->height - 1, RGB(128, 128, 128));
-    zl_qdraw_line(button->x, button->y + button->height - 1, button->x + button->width - 1, button->y + button->height - 1, RGB(128, 128, 128));
+    // Draw base
+    zl_qdraw_filled_rect(window, x1, y1, drawWidth, drawHeight, RGB(125, 125, 125));
 
-    // Inner area to enhance 3D effect
-    zl_qdraw_filled_rect(window, button->x + 2, button->y + 2, button->width - 4, button->height - 4, RGB(224, 224, 224));
+    // Edges
+    zl_qdraw_line(x1, y1, x1 + drawWidth - 1, y1, RGB(255, 255, 255));
+    zl_qdraw_line(x1, y1, x1, y1 + drawHeight - 1, RGB(255, 255, 255));
+    zl_qdraw_line(x1 + drawWidth - 1, y1, x1 + drawWidth - 1, y1 + drawHeight - 1, RGB(128, 128, 128));
+    zl_qdraw_line(x1, y1 + drawHeight - 1, x1 + drawWidth - 1, y1 + drawHeight - 1, RGB(128, 128, 128));
 
-    // Center the text
+    // Inner
+    zl_qdraw_filled_rect(window, x1 + 2, y1 + 2, drawWidth - 4, drawHeight - 4, RGB(224, 224, 224));
+
+    // Center text
     unsigned int textWidth = (unsigned int)zl_qstrlen(button->text) * 8;
     unsigned int textHeight = 16;
-    unsigned int textX = button->x + (button->width / 2) - (textWidth / 2);
-    unsigned int textY = button->y + (button->height / 2) - (textHeight / 2);
-    
+    unsigned int textX = x1 + (drawWidth / 2) - (textWidth / 2);
+    unsigned int textY = y1 + (drawHeight / 2) - (textHeight / 2);
 
-    // Cursor detection
     POINT cursor;
     GetCursorPos(&cursor);
     ScreenToClient(window, &cursor);
 
-    if (cursor.x >= button->x && cursor.x <= button->x + button->width &&
-        cursor.y >= button->y && cursor.y <= button->y + button->height) {
+    // Cursor detection only if cursor is within clamped region
+    if (cursor.x >= x1 && cursor.x < x1 + (LONG)drawWidth &&
+        cursor.y >= y1 && cursor.y < y1 + (LONG)drawHeight)
+    {
+        zl_qdraw_filled_rect(window, x1 + 2, y1 + 2, drawWidth - 4, drawHeight - 4, RGB(208, 208, 208));
 
-        // Draw hover effect (slightly darker shade)
-        zl_qdraw_filled_rect(window, button->x + 2, button->y + 2, button->width - 4, button->height - 4, RGB(208, 208, 208));
+        // Pressed effect
+        if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) && MOUSETOGGLE == ZL_FALSE) {
+            zl_qdraw_filled_rect(window, x1 + 2, y1 + 2, drawWidth - 4, drawHeight - 4, RGB(160, 160, 160));
 
-        // Check if left mouse button is pressed
-        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000 && MOUSETOGGLE == ZL_FALSE) {
-            // Draw pressed effect (invert highlight/shadow)
-            zl_qdraw_filled_rect(window, button->x + 2, button->y + 2, button->width - 4, button->height - 4, RGB(160, 160, 160));
-
-            zl_qdraw_line(button->x, button->y, button->x + button->width - 1, button->y, RGB(128, 128, 128));
-            zl_qdraw_line(button->x, button->y, button->x, button->y + button->height - 1, RGB(128, 128, 128));
-            zl_qdraw_line(button->x + button->width - 1, button->y, button->x + button->width - 1, button->y + button->height - 1, RGB(255, 255, 255));
-            zl_qdraw_line(button->x, button->y + button->height - 1, button->x + button->width - 1, button->y + button->height - 1, RGB(255, 255, 255));
+            zl_qdraw_line(x1, y1, x1 + drawWidth - 1, y1, RGB(128, 128, 128));
+            zl_qdraw_line(x1, y1, x1, y1 + drawHeight - 1, RGB(128, 128, 128));
+            zl_qdraw_line(x1 + drawWidth - 1, y1, x1 + drawWidth - 1, y1 + drawHeight - 1, RGB(255, 255, 255));
+            zl_qdraw_line(x1, y1 + drawHeight - 1, x1 + drawWidth - 1, y1 + drawHeight - 1, RGB(255, 255, 255));
 
             if (button->onClick) {
                 button->onClick();
             }
             MOUSETOGGLE = ZL_TRUE;
+        } else {
+            MOUSETOGGLE = ZL_FALSE;
         }
-        else MOUSETOGGLE = ZL_FALSE;
     }
+
     zl_qdraw_string_font(window, textX, textY, button->text_size, button->text, RGB(0, 0, 0), NULL);
 }
 
@@ -664,4 +704,295 @@ ZL_BUTTON* __cdecl zl_qcreate_button(int x, int y, int width, int height, int te
     }
     button->visible = ZL_TRUE;
     return button;
+}
+
+void __cdecl zl_show_tooltip(ZURELIB_WHDLE window, const char* text, int x, int y) {
+    // Calculate the width and height of the tooltip
+    int textWidth = zl_qstrlen(text) * 6;
+    int textHeight = 16;
+    int padding = 4;
+    int tooltipWidth = textWidth + padding * 2;
+    int tooltipHeight = textHeight + padding * 2;
+
+    // Draw the tooltip background with a light yellow color
+    zl_qdraw_filled_rect(window, x, y, tooltipWidth, tooltipHeight, RGB(255, 255, 225));
+
+    // Draw the tooltip border with a dark gray color
+    zl_qdraw_rect(window, x, y, tooltipWidth, tooltipHeight, RGB(128, 128, 128));
+
+    // Draw the text inside the tooltip
+    zl_qdraw_string_font(window, x + padding, y + padding, 12, text, RGB(0, 0, 0), NULL);
+}
+
+void __cdecl zl_show_mouse_tooltip(ZURELIB_WHDLE window, const char* text) {
+    POINT cursor;
+    GetCursorPos(&cursor);
+    ScreenToClient(window, &cursor);
+    zl_show_tooltip(window, text, cursor.x + 16, cursor.y + 16);
+}
+
+void __cdecl zl_dock_item(ZURELIB_WHDLE window, ZURELIB_WHDLE item, ZL_DOCK_LOCATION location)
+{
+    ZL_DEFAULT_ELEMENT transform = { 0 };
+    memcpy(&transform, item, sizeof(ZL_DEFAULT_ELEMENT)); // get the item's position and size
+    switch (location)
+    {
+    case ZL_DOCK_TOP:
+        transform.x = 0;
+        transform.y = 0;
+        zl_qget_window_drawing_size(window, &transform.width, NULL);
+        break;
+    case ZL_DOCK_BOTTOM:
+        zl_qget_window_drawing_size(window, &transform.width, &transform.height);
+        transform.x = 0;
+        transform.y = transform.height - transform.height;
+        break;
+    case ZL_DOCK_LEFT:
+        transform.x = 0;
+        transform.y = 0;
+        zl_qget_window_drawing_size(window, &transform.width, &transform.height);
+        break;
+    case ZL_DOCK_RIGHT:
+        zl_qget_window_drawing_size(window, &transform.width, &transform.height);
+        transform.x = transform.width - transform.width;
+        transform.y = 0;
+        break;
+    case ZL_DOCK_FILL:  
+        zl_qget_window_drawing_size(window, &transform.width, &transform.height);
+        transform.x = 0;
+        transform.y = 0;
+        break;
+    }
+    transform.docked = ZL_TRUE;
+    memcpy(item, &transform, sizeof(ZL_DEFAULT_ELEMENT)); // set the item's position and size
+}
+
+static HANDLE g_drawThread = NULL;
+static volatile BOOL g_running = TRUE;
+//drawingthread func ptr
+void (*drawingthread)(void) = NULL;
+unsigned __stdcall DrawThread(void* param) {
+    ZURELIB_WHDLE window = (ZURELIB_WHDLE)param;
+    while (g_running) {
+        if (window) {
+            // Render your scene
+            drawingthread();
+            zl_qupdate_window(window);
+        }
+        
+    }
+    return 0;
+}
+
+void zl_start_dedicated_render_thread(ZURELIB_WHDLE window, void (*drawing)(void)) {
+    g_running = TRUE;
+    drawingthread = drawing;
+    g_drawThread = (HANDLE)_beginthreadex(NULL, 0, DrawThread, window, 0, NULL);
+}
+
+void zl_stop_dedicated_render_thread() {
+    g_running = FALSE;
+    if (g_drawThread) {
+        WaitForSingleObject(g_drawThread, INFINITE);
+        CloseHandle(g_drawThread);
+        g_drawThread = NULL;
+    }
+}
+
+//disable -Werror=maybe-uninitialized
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+
+//label
+ZL_LABEL* __cdecl zl_qcreate_label(int x, int y, int width, int height, int text_size, const char* text, ZL_BOOL auto_width, ZL_BOOL no_background) {
+    ZL_LABEL* label = (ZL_LABEL*)malloc(sizeof(ZL_LABEL));
+    if (!label) {
+        return NULL;
+    }
+
+    label->x = x;
+    label->y = y;
+    label->width = width;
+    label->height = height;
+    label->text_size = text_size;
+    label->width_auto = auto_width;
+    label->visible = ZL_TRUE;
+    label->docked = ZL_FALSE;
+    label->text = (char*)malloc(zl_qstrlen(text) + 1);
+    label->no_background = no_background;
+    zl_qstrcpy(label->text, text);
+    return label;
+}
+
+#pragma GCC diagnostic pop
+
+//zl_qdraw_label
+void __cdecl zl_qdraw_label(ZURELIB_WHDLE window, ZL_LABEL* label) {
+    if (!label || !label->visible) {
+        return;
+    }
+
+    // Get window size and clamp label coords
+    int wndWidth = 0, wndHeight = 0;
+    zl_qget_window_drawing_size(window, &wndWidth, &wndHeight);
+    int x1 = label->x < 0 ? 0 : label->x;
+    int y1 = label->y < 0 ? 0 : label->y;
+    int x2 = (label->x + label->width) > wndWidth ? wndWidth : (label->x + label->width);
+    int y2 = (label->y + label->height) > wndHeight ? wndHeight : (label->y + label->height);
+
+    int drawWidth = x2 - x1;
+    int drawHeight = y2 - y1;
+    if (drawWidth <= 0 || drawHeight <= 0) {
+        return;
+    }
+    if (!label->no_background) {
+        // Draw base
+        zl_qdraw_filled_rect(window, x1, y1, drawWidth, drawHeight, RGB(255, 255, 255));
+
+        // Edges
+        zl_qdraw_line(x1, y1, x1 + drawWidth - 1, y1, RGB(128, 128, 128));
+        zl_qdraw_line(x1, y1, x1, y1 + drawHeight - 1, RGB(128, 128, 128));
+        zl_qdraw_line(x1 + drawWidth - 1, y1, x1 + drawWidth - 1, y1 + drawHeight - 1, RGB(255, 255, 255));
+        zl_qdraw_line(x1, y1 + drawHeight - 1, x1 + drawWidth - 1, y1 + drawHeight - 1, RGB(255, 255, 255));
+
+        // Inner
+        zl_qdraw_filled_rect(window, x1 + 2, y1 + 2, drawWidth - 4, drawHeight - 4, RGB(224, 224, 224));
+    }
+
+    // Center text
+    unsigned int textWidth = (unsigned int)zl_qstrlen(label->text) * 8;
+    unsigned int textHeight = 16;
+    unsigned int textX = x1 + (drawWidth / 2) - (textWidth / 2);
+    unsigned int textY = y1 + (drawHeight / 2) - (textHeight / 2);
+
+    zl_qdraw_string_font(window, textX, textY, label->text_size, label->text, RGB(0, 0, 0), NULL);
+}
+
+//zl_create_textbox
+ZL_TEXTBOX* __cdecl zl_qcreate_textbox(int x, int y, int width, int height, int text_size, const char* text, ZL_BOOL readonly, ZL_BOOL has_cursor, ZL_BOOL multiline, ZL_BOOL password, ZL_BOOL no_background)
+{
+    ZL_TEXTBOX* textbox = (ZL_TEXTBOX*)malloc(sizeof(ZL_TEXTBOX));
+    if (!textbox) {
+        return NULL;
+    }
+
+    textbox->x = x;
+    textbox->y = y;
+    textbox->width = width;
+    textbox->height = height;
+    textbox->text_size = text_size;
+    textbox->readonly = readonly;
+    textbox->has_cursor = has_cursor;
+    textbox->multiline = multiline;
+    textbox->password = password;
+    textbox->no_background = no_background;
+    textbox->visible = ZL_TRUE;
+    textbox->docked = ZL_FALSE;
+    textbox->text = (char*)malloc(zl_qstrlen(text) + 1);
+    zl_qstrcpy(textbox->text, text);
+    return textbox;
+}
+void zl_qhandle_textbox_input(unsigned int wParam);
+
+static ZL_TEXTBOX* g_activeTextbox = NULL;
+
+static void draw_multiline_text(ZURELIB_WHDLE window, ZL_TEXTBOX* textbox, int startX, int startY) {
+    char* temp = _strdup(textbox->text);
+    char* line = strtok(temp, "\n");
+    int lineOffsetY = 0;
+    while (line) {
+        zl_qdraw_string_font(window, startX, startY + lineOffsetY, textbox->text_size, line, RGB(0,0,0), NULL);
+        lineOffsetY += 16; 
+        line = strtok(NULL, "\n");
+    }
+    free(temp);
+}
+
+void zl_qdraw_textbox(ZURELIB_WHDLE window, ZL_TEXTBOX* textbox) {
+    if (!textbox || !textbox->visible) return;
+
+    // Get window sizing and clamp coords
+    int wndWidth = 0, wndHeight = 0;
+    zl_qget_window_drawing_size(window, &wndWidth, &wndHeight);
+    int x1 = textbox->x < 0 ? 0 : textbox->x;
+    int y1 = textbox->y < 0 ? 0 : textbox->y;
+    int x2 = (textbox->x + textbox->width) > wndWidth ? wndWidth : (textbox->x + textbox->width);
+    int y2 = (textbox->y + textbox->height) > wndHeight ? wndHeight : (textbox->y + textbox->height);
+    int drawWidth = x2 - x1;
+    int drawHeight = y2 - y1;
+
+    if (drawWidth <= 0 || drawHeight <= 0) return;
+
+    // Check click logic
+    POINT cursor; 
+    GetCursorPos(&cursor);
+    ScreenToClient(window, &cursor);
+    if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+        if (cursor.x >= x1 && cursor.x < x1 + drawWidth && cursor.y >= y1 && cursor.y < y1 + drawHeight) {
+            g_activeTextbox = textbox;
+        } else if (g_activeTextbox == textbox) {
+            g_activeTextbox = NULL;
+        }
+    }
+
+    // Draw background
+    if (!textbox->no_background) {
+        zl_qdraw_filled_rect(window, x1, y1, drawWidth, drawHeight, RGB(255,255,255));
+        zl_qdraw_line(x1, y1, x1+drawWidth-1, y1, RGB(128,128,128));
+        zl_qdraw_line(x1, y1, x1, y1+drawHeight-1, RGB(128,128,128));
+        zl_qdraw_line(x1+drawWidth-1, y1, x1+drawWidth-1, y1+drawHeight-1, RGB(255,255,255));
+        zl_qdraw_line(x1, y1+drawHeight-1, x1+drawWidth-1, y1+drawHeight-1, RGB(255,255,255));
+        zl_qdraw_filled_rect(window, x1+2, y1+2, drawWidth-4, drawHeight-4, RGB(224,224,224));
+    }
+
+    // Draw text
+    if (textbox->password) {
+        int len = (int)zl_qstrlen(textbox->text);
+        char* masked = (char*)malloc(len+1);
+        memset(masked, '*', len);
+        masked[len] = '\0';
+        zl_qdraw_string_font(window, x1+4, y1+4, textbox->text_size, masked, RGB(0,0,0), NULL);
+        free(masked);
+    } else if (textbox->multiline) {
+        draw_multiline_text(window, textbox, x1+4, y1+4);
+    } else {
+        zl_qdraw_string_font(window, x1+4, y1+4, textbox->text_size, textbox->text, RGB(0,0,0), NULL);
+    }
+
+    // Draw cursor if active
+    if (g_activeTextbox == textbox && textbox->has_cursor) {
+        // Simple cursor at the end of the last line
+        unsigned int len = (unsigned int)zl_qstrlen(textbox->text);
+        unsigned int cursorX = x1 + 4 + (len * 8);
+        int lineCount = 1;
+        for (unsigned int i = 0; i < len; i++) {
+            if (textbox->text[i] == '\n') lineCount++;
+        }
+        int cursorY = y1 + 4 + (lineCount-1)*16;
+        zl_qdraw_line(cursorX, cursorY, cursorX, cursorY+16, RGB(0,0,0));
+    }
+
+    // Outline if active
+    if (g_activeTextbox == textbox) {
+        zl_qdraw_rect(window, x1, y1, drawWidth, drawHeight, RGB(0,0,0));
+    }
+}
+
+void zl_qhandle_textbox_input(unsigned int wParam) {
+    if (!g_activeTextbox || g_activeTextbox->readonly) return;
+    if (wParam == VK_BACK) {
+        unsigned int len = zl_qstrlen(g_activeTextbox->text);
+        if (len > 0) g_activeTextbox->text[len-1] = '\0';
+    } else if (wParam == VK_RETURN && g_activeTextbox->multiline) {
+        unsigned int len = zl_qstrlen(g_activeTextbox->text);
+        if (len < 254) {
+            g_activeTextbox->text[len] = '\n';
+            g_activeTextbox->text[len+1] = '\0';
+        }
+    } else if (wParam >= 32 && wParam <= 126) {
+        unsigned int len = zl_qstrlen(g_activeTextbox->text);
+        if (len < 255) {
+            g_activeTextbox->text[len] = (char)wParam;
+            g_activeTextbox->text[len+1] = '\0';
+        }
+    }
 }
