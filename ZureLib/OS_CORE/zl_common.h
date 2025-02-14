@@ -24,13 +24,31 @@ typedef enum
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_zero(void* ptr, unsigned int size);
 
 /// @brief Load a file into memory
-ZURELIB_API ZURELIB_RET(void*) __cdecl zl_load_file(const char* path, unsigned long long* size);
+ZURELIB_API ZURELIB_RET(void*) __cdecl zl_load_file(const char* path, unsigned long long size);
 
 /// @brief Free memory allocated by zl_load_file
 ZURELIB_API ZURELIB_RET(ZL_BOOL) __cdecl zl_free_file(void* ptr);
 
 /// @brief Save a block of memory to a file
 ZURELIB_API ZURELIB_RET(ZL_BOOL) __cdecl zl_save_file(const char* path, void* ptr, unsigned long long size);
+
+/// @brief Check if a file exists
+ZURELIB_API ZURELIB_RET(ZL_BOOL) __cdecl zl_file_exists(const char* path);
+
+/// @brief Get the Current Working Directory
+ZURELIB_API ZURELIB_RET(char*) __cdecl zl_get_cwd();
+
+/// @brief Get the Current Executable Path (Current Process)
+ZURELIB_API ZURELIB_RET(char*) __cdecl zl_get_executable_path();
+
+/// @brief Get the Current Executable Name (Current Process)
+ZURELIB_API ZURELIB_RET(char*) __cdecl zl_get_executable_name();
+
+/// @brief Get the Current Executable Directory (Current Process)
+ZURELIB_API ZURELIB_RET(char*) __cdecl zl_get_executable_directory();
+
+/// @brief Local to Global File Path
+ZURELIB_API ZURELIB_RET(char*) __cdecl zl_local_to_global_path(const char* localPath);
 
 /// @brief Get the length of a file
 ZURELIB_API ZURELIB_RET(unsigned long long) __cdecl zl_get_file_length(const char* path);
@@ -43,5 +61,11 @@ ZURELIB_API ZURELIB_RET(unsigned short) __cdecl zl_big_endian_to_host16(const un
 
 /// @brief Get the current time (double)
 ZURELIB_API ZURELIB_RET(double) __cdecl zl_get_time();
+
+/// @brief Error handling function
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_error(const char* message);
+
+/// @brief Fatal error handling function
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_fatal(const char* message, int code);
 
 #endif // ZURELIB_OS_CORE_ZL_COMMON_H

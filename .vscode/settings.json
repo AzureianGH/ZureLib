@@ -8,6 +8,8 @@
         "calling_conv_ret.h": "c",
         "zl_types.h": "c",
         "stdlib.h": "c",
-        "*.rh": "c"
+        "*.rh": "c",
+        "fast_io.h": "c",
+        "numerics.h": "c"
     }
 }

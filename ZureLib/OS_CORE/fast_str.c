@@ -1,6 +1,8 @@
 #include "fast_str.h"
 #include <string.h>
 #include "zl_init.h"
+#include <stdlib.h>
+#include <stdio.h>
 #ifdef ZURELIB_OS_ENABLE_SSE
 #include <emmintrin.h>
 #endif
@@ -52,4 +54,58 @@ ZURELIB_API ZURELIB_RET(unsigned int) __cdecl zl_qstrlen(const char * str)
 ZURELIB_RET(unsigned int) __cdecl zl_qget_string_width(const char* str)
 {
     return zl_qstrlen(str);
+}
+
+ZURELIB_RET(char*) __cdecl zl_qstrcat(const char* str1, const char* str2)
+{
+    unsigned int len1 = zl_qstrlen(str1);
+    unsigned int len2 = zl_qstrlen(str2);
+    char* result = (char*)malloc(len1 + len2 + 1);
+    memcpy(result, str1, len1);
+    memcpy(result + len1, str2, len2);
+    result[len1 + len2] = '\0';
+    return result;
+}
+
+ZURELIB_RET(void) __cdecl zl_qstrcpy(char* dest, const char* src)
+{
+    unsigned int len = zl_qstrlen(src);
+    memcpy(dest, src, len);
+    dest[len] = '\0';
+}
+
+ZURELIB_RET(char*) __cdecl zl_qitoa(int value)
+{
+    char buffer[12];
+    sprintf(buffer, "%d", value);
+    return strdup(buffer);
+}
+
+ZURELIB_RET(char*) __cdecl zl_qftoa(float value)
+{
+    char buffer[32];
+    sprintf(buffer, "%f", value);
+    return strdup(buffer);
+}
+
+ZURELIB_RET(char*) __cdecl zl_qdtoa(double value)
+{
+    char buffer[32];
+    sprintf(buffer, "%f", value);
+    return strdup(buffer);
+}
+
+ZURELIB_RET(int) __cdecl zl_qatoi(const char* str)
+{
+    return atoi(str);
+}
+
+ZURELIB_RET(float) __cdecl zl_qatof(const char* str)
+{
+    return atof(str);
+}
+
+ZURELIB_RET(double) __cdecl zl_qatod(const char* str)
+{
+    return atof(str);
 }

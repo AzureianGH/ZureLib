@@ -9,10 +9,9 @@
 #define ZURELIB_WINDOW_HIDDEN 0
 
 typedef struct {
-    void* font;
+    HFONT font;
+    HANDLE fontHandle;
     unsigned long long size;
-    unsigned char encoding; // 0 = ANSI, 1 = UTF-8, 2 = UTF-16
-    unsigned char style; // 0 = Regular, 1 = Bold, 2 = Italic, 3 = Bold Italic
 } ZL_TTF_FONT;
 
 typedef union {
@@ -30,6 +29,8 @@ typedef union {
 } ZL_WINDOW_FLAGS;
 /// @brief Quick-create a window
 ZURELIB_API ZURELIB_RET(ZURELIB_WHDLE) __cdecl zl_qcreate_window(const char* title, unsigned int width, unsigned int height);
+
+ZURELIB_API ZURELIB_RET(LPCWSTR) __cdecl zl_qcstring_to_lpcwstr(const char* str);
 
 /// @brief Quick-destroy a window
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qdestroy_window(ZURELIB_WHDLE window);
@@ -80,7 +81,7 @@ ZURELIB_API ZURELIB_RET(void) __cdecl zl_qdraw_filled_circle(ZURELIB_WHDLE windo
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qdraw_string(ZURELIB_WHDLE window, unsigned int x, unsigned int y, const char* str, unsigned int color);
 
 /// @brief Draw a string with a font on the window
-ZURELIB_API ZURELIB_RET(void) __cdecl zl_qdraw_string_font(ZURELIB_WHDLE window, unsigned int x, unsigned int y, const char* str, unsigned int color, ZL_TTF_FONT font);
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_qdraw_string_font(ZURELIB_WHDLE window, int x, int y, int size, const char* str, int color, const char* fontName);
 
 /// @brief Update the window
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qupdate_window(ZURELIB_WHDLE window);
@@ -123,16 +124,13 @@ ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_resizable(ZURELIB_WHDLE win
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_flags(ZURELIB_WHDLE window, ZL_WINDOW_FLAGS flags);
 
 /// @brief Load a TrueType font from a file
-ZURELIB_API ZURELIB_RET(ZL_TTF_FONT) __cdecl zl_load_ttf_font_file(const char* path);
-
-/// @brief Load a TrueType font from memory
-ZURELIB_API ZURELIB_RET(ZL_TTF_FONT) __cdecl zl_load_ttf_font_memory(const void* data, unsigned long long size);
+ZURELIB_API ZURELIB_RET(ZL_TTF_FONT) __cdecl zl_load_ttf_font_file(const char* path, const char* fontName);
 
 /// @brief Free a TrueType font
-ZURELIB_API ZURELIB_RET(void) __cdecl zl_free_ttf_font(ZL_TTF_FONT font);
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_free_ttf_font(ZL_TTF_FONT font, const char* path);
 
 /// @brief Set the window font
-ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_font(ZURELIB_WHDLE window, ZL_TTF_FONT font);
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_font(ZURELIB_WHDLE window, const char* fontName, int size);
 
 /// @brief Set the window font size
 ZURELIB_API ZURELIB_RET(void) __cdecl zl_qset_window_font_size(ZURELIB_WHDLE window, unsigned int size);
@@ -232,14 +230,51 @@ typedef enum
     ZL_MOUSE_X2 = 0x16
 } ZL_MOUSE_BUTTON;
 
+typedef struct
+{
+    void (*onClick)(void);
+    int x;
+    int y;
+    int width;
+    int height;
+    char text[256];
+    int text_size;
+    ZL_BOOL width_auto;
+    ZL_BOOL visible;
+} ZL_BUTTON;
 
+typedef enum
+{
+    ZL_MB_OK = 0,
+    ZL_MB_OK_CANCEL = 1,
+    ZL_MB_YES_NO = 2,
+    ZL_MB_YES_NO_CANCEL = 3
+} ZL_MESSAGE_BOX_TYPE;
+
+typedef enum
+{
+    ZL_MB_OK_RETURN = 0,
+    ZL_MB_CANCEL_RETURN = 1,
+    ZL_MB_YES_RETURN = 2,
+    ZL_MB_NO_RETURN = 3
+} ZL_MESSAGE_BOX_RETURN;
 
 /// @brief Check for a key down
 ZURELIB_API ZURELIB_RET(unsigned char) __cdecl zl_qkey_down(ZL_KEYCODE key);
 
 /// @brief Check for a mouse button down
 ZURELIB_API ZURELIB_RET(unsigned char) __cdecl zl_qmouse_button_down(ZL_MOUSE_BUTTON button);
+/// @brief Get the mouse position
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_qget_mouse_position(ZURELIB_WHDLE window, float* x, float* y);
 ZURELIB_API ZURELIB_RET(unsigned int) __cdecl zl_qmouse_x();
 ZURELIB_API ZURELIB_RET(unsigned int) __cdecl zl_qmouse_y();
+
+
+//zl_qmessage_box
+ZURELIB_API ZURELIB_RET(ZL_MESSAGE_BOX_RETURN) __cdecl zl_qmessage_box(ZURELIB_WHDLE window, const char* title, const char* message, ZL_MESSAGE_BOX_TYPE type);
+
+ZURELIB_API ZURELIB_RET(void) __cdecl zl_qdraw_button(ZURELIB_WHDLE window, ZL_BUTTON* button);
+
+ZURELIB_API ZURELIB_RET(ZL_BUTTON*) __cdecl zl_qcreate_button(int x, int y, int width, int height, int text_size, const char* text, void (*onClick)(void), ZL_BOOL auto_width);
 
 #endif // ZURELIB_OS_WNDS_FAST_WINDOW_H

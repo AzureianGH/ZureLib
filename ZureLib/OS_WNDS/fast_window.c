@@ -8,7 +8,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
-
+#include <stdint.h>
 // Back buffer structure
 typedef struct {
     HDC backBufferDC;
@@ -19,7 +19,7 @@ typedef struct {
 } BackBuffer;
 
 BackBuffer g_backBuffer = { 0 };
-
+ZL_BOOL MOUSETOGGLE = ZL_FALSE;
 // Initialize back buffer
 void InitializeBackBuffer(HWND hwnd) {
     if (!hwnd) return;
@@ -92,7 +92,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 globalEventHandlers.onClick();
             }
             break;
-
         case WM_SIZE:
             if (globalEventHandlers.onResize) {
                 unsigned int width = LOWORD(lParam);
@@ -147,6 +146,12 @@ ZURELIB_WHDLE __cdecl zl_qcreate_window(const char* title, unsigned int width, u
     UpdateWindow(hwnd);
     return hwnd;
 }
+
+LPCWSTR __cdecl zl_qcstring_to_lpcwstr(const char* str) {
+    wchar_t* wstr = (wchar_t*)malloc((strlen(str) + 1) * sizeof(wchar_t));
+    mbstowcs(wstr, str, strlen(str) + 1);
+    return wstr;
+} 
 
 void __cdecl zl_qdestroy_window(ZURELIB_WHDLE window) {
     DestroyWindow(window);
@@ -257,7 +262,7 @@ void __cdecl zl_qdraw_filled_circle(ZURELIB_WHDLE window, unsigned int x, unsign
 void __cdecl zl_qdraw_string(ZURELIB_WHDLE window, unsigned int x, unsigned int y, const char* str, unsigned int color) {
     SetTextColor(g_backBuffer.backBufferDC, color);
     SetBkMode(g_backBuffer.backBufferDC, TRANSPARENT);
-    TextOutA(g_backBuffer.backBufferDC, x, y, str, (int)zl_qstrlen(str));
+    TextOutW(g_backBuffer.backBufferDC, x, y, zl_qcstring_to_lpcwstr(str), (int)zl_qstrlen(str));
 }
 
 // Present back buffer to the window
@@ -408,6 +413,14 @@ unsigned char __cdecl zl_qmouse_button_down(ZL_MOUSE_BUTTON button) {
     }
 }
 
+void __cdecl zl_qget_mouse_position(ZURELIB_WHDLE window, float* x, float* y) {
+    POINT point;
+    GetCursorPos(&point);
+    ScreenToClient(window, &point);
+    *x = (float)point.x;
+    *y = (float)point.y;
+}
+
 unsigned int __cdecl zl_qmouse_x() {
     POINT point;
     GetCursorPos(&point);
@@ -421,7 +434,6 @@ unsigned int __cdecl zl_qmouse_y() {
     ScreenToClient(GetForegroundWindow(), &point);
     return point.y;
 }
-
 // TTF font structures and loading
 typedef struct {
     unsigned int version;
@@ -443,81 +455,86 @@ typedef struct {
     short glyphDataFormat;
 } ttf_header_font_zl;
 
-ZL_TTF_FONT __cdecl zl_local_parse_ttf(const void* data, unsigned long long size) {
-    if (!data || size == 0) {
+ZL_TTF_FONT __cdecl zl_load_ttf_font_file(const char* path, const char* fontName) {
+    DWORD resultdw = AddFontResourceExW(zl_qcstring_to_lpcwstr(path), FR_PRIVATE, NULL);
+    
+    if (resultdw == 0) {
+        printf("Failed to load font: %s\n", path);
         return (ZL_TTF_FONT){ 0 };
     }
 
-    DWORD numFonts = 0;
-    HANDLE fontHandle = AddFontMemResourceEx((void*)data, (DWORD)size, NULL, &numFonts);
-    if (!fontHandle || numFonts == 0) {
-        printf("Failed to load TTF font.\n");
+    // Notify the system that a font has been added
+    SendNotifyMessage(HWND_BROADCAST, WM_FONTCHANGE, 0, 0);
+
+    LOGFONT lf = {0};
+    lf.lfHeight = -12;
+    lf.lfWeight = FW_NORMAL;
+    
+    // Convert fontName from char* to wchar_t*
+    MultiByteToWideChar(CP_UTF8, 0, fontName, -1, (LPWSTR)lf.lfFaceName, LF_FACESIZE);
+    
+    HFONT font = CreateFontIndirect(&lf);
+    if (!font) {
+        printf("Failed to create font: %s\n", fontName);
         return (ZL_TTF_FONT){ 0 };
     }
 
-    HFONT hFont = CreateFont(
-        24, 0, 0, 0,
-        FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-        CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE, "CustomFont"
-    );
-
-    if (!hFont) {
-        printf("Failed to create HFONT.\n");
-        RemoveFontMemResourceEx(fontHandle);
-        return (ZL_TTF_FONT){ 0 };
-    }
-
-    ZL_TTF_FONT font = { 0 };
-    font.font = hFont;
-    font.size = size;
-    font.encoding = 0;
-    font.style = 0;
-    return font;
+    return (ZL_TTF_FONT){ font, (void*)&font, zl_get_file_length(path) };
 }
 
-ZL_TTF_FONT __cdecl zl_load_ttf_font_file(const char* path) {
-    unsigned long long size;
-    ZL_FILE_HANDLE file = zl_load_file(path, &size);
-    if (!file) {
-        return (ZL_TTF_FONT){ 0 };
-    }
-    return zl_local_parse_ttf(file, size);
-}
 
-ZL_TTF_FONT __cdecl zl_load_ttf_font_memory(const void* data, unsigned long long size) {
-    return zl_local_parse_ttf(data, size);
-}
-
-void __cdecl zl_free_ttf_font(ZL_TTF_FONT font) {
+void __cdecl zl_free_ttf_font(ZL_TTF_FONT font, const char* path) {
     if (font.font) {
         DeleteObject((HFONT)font.font);
     }
+    if (path) {
+        RemoveFontResourceExW(zl_qcstring_to_lpcwstr(path), FR_PRIVATE, NULL);
+        SendMessage(HWND_BROADCAST, WM_FONTCHANGE, 0, 0);
+    }
 }
 
-void __cdecl zl_qset_window_font(ZURELIB_WHDLE window, ZL_TTF_FONT font) {
-    SendMessage(window, WM_SETFONT, (WPARAM)font.font, TRUE);
+
+void __cdecl zl_qset_window_font(ZURELIB_WHDLE window, const char* fontName, int size) {
+    wchar_t fontNameW[LF_FACESIZE];
+    MultiByteToWideChar(CP_UTF8, 0, fontName, -1, fontNameW, LF_FACESIZE);
+
+    HFONT hFont = CreateFontW(
+        -MulDiv(size, GetDeviceCaps(GetDC(window), LOGPIXELSY), 72), 0, 0, 0, FW_DONTCARE, 
+        FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, 
+        CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, fontNameW);
+    
+    SendMessage(window, WM_SETFONT, (WPARAM)hFont, TRUE);
 }
+
 
 void __cdecl zl_qset_window_font_size(ZURELIB_WHDLE window, unsigned int size) {
-    SendMessage(window, WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT), MAKELPARAM(TRUE, size));
+    HFONT hFont = CreateFont(
+        -MulDiv(size, GetDeviceCaps(GetDC(window), LOGPIXELSY), 72), 0, 0, 0, FW_DONTCARE, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, VARIABLE_PITCH, NULL);
+    SendMessage(window, WM_SETFONT, (WPARAM)hFont, TRUE);
 }
 
 // Draw a string using a custom font on the back buffer
-void __cdecl zl_qdraw_string_font(ZURELIB_WHDLE window, unsigned int x, unsigned int y,
-                                  const char* str, unsigned int color, ZL_TTF_FONT font) {
-    if (!font.font) {
-        printf("Invalid font.\n");
-        return;
-    }
+void __cdecl zl_qdraw_string_font(ZURELIB_WHDLE window, int x, int y, int size, const char* str, int color, const char* fontName) {
+    wchar_t fontNameW[LF_FACESIZE];
+    MultiByteToWideChar(CP_UTF8, 0, fontName, -1, fontNameW, LF_FACESIZE);
+
+    HFONT hFont = CreateFontW(
+        -MulDiv(size, GetDeviceCaps(g_backBuffer.backBufferDC, LOGPIXELSY), 72), 0, 0, 0, 
+        FW_DONTCARE, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, 
+        CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, fontNameW);
+
+    HFONT oldFont = (HFONT)SelectObject(g_backBuffer.backBufferDC, hFont);
     SetTextColor(g_backBuffer.backBufferDC, color);
     SetBkMode(g_backBuffer.backBufferDC, TRANSPARENT);
+    
+    TextOutA(g_backBuffer.backBufferDC, x, y, str, (int)strlen(str));
 
-    HFONT oldFont = (HFONT)SelectObject(g_backBuffer.backBufferDC, (HFONT)font.font);
-    TextOutA(g_backBuffer.backBufferDC, x, y, str, (int)zl_qstrlen(str));
     SelectObject(g_backBuffer.backBufferDC, oldFont);
+    DeleteObject(hFont);
 }
+
 
 // Set window icon
 void __cdecl zl_qset_window_icon(ZURELIB_WHDLE window, HICON icon) {
@@ -535,4 +552,116 @@ void __cdecl zl_qset_console_visibility(unsigned char visible) {
     } else {
         AllocConsole();
     }
+}
+
+ZL_MESSAGE_BOX_RETURN __cdecl zl_qmessage_box(ZURELIB_WHDLE window, const char* title, const char* message, ZL_MESSAGE_BOX_TYPE type) {
+    UINT flags = 0;
+    switch (type) {
+        case ZL_MB_OK:
+            flags = MB_OK;
+            break;
+        case ZL_MB_OK_CANCEL:
+            flags = MB_OKCANCEL;
+            break;
+        case ZL_MB_YES_NO:
+            flags = MB_YESNO;
+            break;
+        case ZL_MB_YES_NO_CANCEL:
+            flags = MB_YESNOCANCEL;
+            break;
+    }
+    int ret = MessageBoxA(window, message, title, flags);
+    switch (ret) {
+        case IDOK:
+            return ZL_MB_OK_RETURN;
+        case IDCANCEL:
+            return ZL_MB_CANCEL_RETURN;
+        case IDYES:
+            return ZL_MB_YES_RETURN;
+        case IDNO:
+            return ZL_MB_NO_RETURN;
+        default:
+            return ZL_MB_CANCEL_RETURN;
+    }
+}
+
+// zl_qdraw_button
+void __cdecl zl_qdraw_button(ZURELIB_WHDLE window, ZL_BUTTON* button) {
+    if (!button || !button->visible) {
+        return;
+    }
+
+    // Button base color
+    zl_qdraw_filled_rect(window, button->x, button->y, button->width, button->height, RGB(125, 125, 125));
+
+    // Highlighted top-left edges (light gray for raised effect)
+    zl_qdraw_line(button->x, button->y, button->x + button->width - 1, button->y, RGB(255, 255, 255));
+    zl_qdraw_line(button->x, button->y, button->x, button->y + button->height - 1, RGB(255, 255, 255));
+
+    // Shadowed bottom-right edges (dark gray for depth)
+    zl_qdraw_line(button->x + button->width - 1, button->y, button->x + button->width - 1, button->y + button->height - 1, RGB(128, 128, 128));
+    zl_qdraw_line(button->x, button->y + button->height - 1, button->x + button->width - 1, button->y + button->height - 1, RGB(128, 128, 128));
+
+    // Inner area to enhance 3D effect
+    zl_qdraw_filled_rect(window, button->x + 2, button->y + 2, button->width - 4, button->height - 4, RGB(224, 224, 224));
+
+    // Center the text
+    unsigned int textWidth = (unsigned int)zl_qstrlen(button->text) * 8;
+    unsigned int textHeight = 16;
+    unsigned int textX = button->x + (button->width / 2) - (textWidth / 2);
+    unsigned int textY = button->y + (button->height / 2) - (textHeight / 2);
+    
+
+    // Cursor detection
+    POINT cursor;
+    GetCursorPos(&cursor);
+    ScreenToClient(window, &cursor);
+
+    if (cursor.x >= button->x && cursor.x <= button->x + button->width &&
+        cursor.y >= button->y && cursor.y <= button->y + button->height) {
+
+        // Draw hover effect (slightly darker shade)
+        zl_qdraw_filled_rect(window, button->x + 2, button->y + 2, button->width - 4, button->height - 4, RGB(208, 208, 208));
+
+        // Check if left mouse button is pressed
+        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000 && MOUSETOGGLE == ZL_FALSE) {
+            // Draw pressed effect (invert highlight/shadow)
+            zl_qdraw_filled_rect(window, button->x + 2, button->y + 2, button->width - 4, button->height - 4, RGB(160, 160, 160));
+
+            zl_qdraw_line(button->x, button->y, button->x + button->width - 1, button->y, RGB(128, 128, 128));
+            zl_qdraw_line(button->x, button->y, button->x, button->y + button->height - 1, RGB(128, 128, 128));
+            zl_qdraw_line(button->x + button->width - 1, button->y, button->x + button->width - 1, button->y + button->height - 1, RGB(255, 255, 255));
+            zl_qdraw_line(button->x, button->y + button->height - 1, button->x + button->width - 1, button->y + button->height - 1, RGB(255, 255, 255));
+
+            if (button->onClick) {
+                button->onClick();
+            }
+            MOUSETOGGLE = ZL_TRUE;
+        }
+        else MOUSETOGGLE = ZL_FALSE;
+    }
+    zl_qdraw_string_font(window, textX, textY, button->text_size, button->text, RGB(0, 0, 0), NULL);
+}
+
+
+// zl_qcreate_button
+ZL_BUTTON* __cdecl zl_qcreate_button(int x, int y, int width, int height, int text_size, const char* text, void (*onClick)(void), ZL_BOOL auto_width) {
+    ZL_BUTTON* button = (ZL_BUTTON*)malloc(sizeof(ZL_BUTTON));
+    if (!button) {
+        return NULL;
+    }
+
+    button->x = x;
+    button->y = y;
+    button->width = width;
+    button->height = height;
+    zl_qstrcpy(button->text, text);
+    button->onClick = onClick;
+    button->text_size = text_size;
+    button->width_auto = auto_width;
+    if (auto_width) {
+        button->width = (zl_qget_string_width(text) * button->text_size ) + 16;
+    }
+    button->visible = ZL_TRUE;
+    return button;
 }
